@@ -12,7 +12,7 @@ Version 0.01
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
@@ -58,6 +58,17 @@ src/stuff.h
 	void stuff_function();
 
 Note you don't need to put stuff.c into your build.pl--  it Just Works(tm).
+
+An even shorter example-- instead of a build.pl:
+
+build.sh
+
+	#!/bin/sh
+
+	export CC="clang"
+	export CFLAGS="-std=c99 -pedantic -Wall -Wextra -O3"
+
+	perl -MApp::AutoBuild -e 'build("main.c");' -- $@
 
 =head1 COMMAND LINE
 
@@ -179,12 +190,34 @@ sub build
 {
 	my $opts = shift;
 
+	if(ref($opts) eq '')
+	{
+		my $bin = $opts;
+		$bin =~ s/\.c$//;
+		$opts = {'programs'=>{$bin=>$opts}};
+	}
+
 	my $start = time;
 
 	my $ab = App::AutoBuild->new();
 	$ab->args(\@ARGV);
-	$ab->cflags($opts->{'cflags'} || []);
-	$ab->ldflags($opts->{'ldflags'} || []);
+
+	my @cflags;
+	my @ldflags;
+
+	push @cflags, split(/\s+/, $ENV{'CFLAGS'}) if($ENV{'CFLAGS'});
+	push @ldflags, split(/\s+/, $ENV{'LDFLAGS'}) if($ENV{'LDFLAGS'});
+
+	push @cflags, @{$opts->{'cflags'}} if($opts->{'cflags'});
+	push @ldflags, @{$opts->{'ldflags'}} if($opts->{'ldflags'});
+
+	$ab->cflags(\@cflags);
+	$ab->ldflags(\@ldflags);
+
+	if($ENV{'CC'})
+	{
+		$ab->{'cc'} = $ENV{'CC'};
+	}
 
 	for(qw(cc osuffix))
 	{
@@ -256,7 +289,7 @@ sub new
 	# some defaults
 	$self->{'verbose'} = 0;
 	$self->{'debug'} = 0;
-	$self->{'cc'} = $ENV{'CC'} || 'gcc';
+	$self->{'cc'} = 'gcc';
 	$self->{'osuffix'} = 'o';
 
 	$self->{'jobs'} = [];
