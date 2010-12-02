@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               App-AutoBuild
-version:            0.02
+version:            0.03
 abstract:           A perl tool to make it quick and easy to compile a C project with automatic compilation of dependencies
 author:
     - Joel Jensen <yobert@gmail.com>
@@ -11,7 +11,9 @@ configure_requires:
 build_requires:
     ExtUtils::MakeMaker:  0
 requires:
+    autodie:              0
     IPC::System::Simple:  0
+    perl:                 5.010000
     Test::More:           0
 no_index:
     directory:
