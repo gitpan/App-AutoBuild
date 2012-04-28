@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               App-AutoBuild
-version:            0.03
-abstract:           A perl tool to make it quick and easy to compile a C project with automatic compilation of dependencies
+version:            0.04
+abstract:           A perl tool to make it quick and easy to compile a C/C++ project with automatic compilation of dependencies
 author:
     - Joel Jensen <yobert@gmail.com>
 license:            perl
@@ -19,7 +19,7 @@ no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.56
+generated_by:       ExtUtils::MakeMaker version 6.57_05
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4

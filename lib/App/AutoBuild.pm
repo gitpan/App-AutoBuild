@@ -4,15 +4,15 @@ use warnings;
 
 =head1 NAME
 
-App::AutoBuild - A perl tool to make it quick and easy to compile a C project with automatic compilation of dependencies
+App::AutoBuild - A perl tool to make it quick and easy to compile a C/C++ project with automatic compilation of dependencies
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 SYNOPSIS
 
@@ -104,7 +104,7 @@ This tool isn't supposed to be a make replacement-- there are plenty of those, a
 
 =head1 CAVEATS
 
-For this to work properly, you must have a scheme and follow it.  Every .c file must have an .h file that matches (with the exception of the .c file with main()).  For now, the .c and .h files must be in the same directory (but this may be fixed in the future).
+For this to work properly, you must have a scheme and follow it.  Every .c/.cpp file must have an .h/.hpp file that matches (with the exception of the .c/.cpp file with main()).  For now, the .c and .h files must be in the same directory (but this may be fixed in the future).
 
 If you have a .h file and an unrelated .c file with the same name (as in, headers.h and headers.c) in the same folder, the .c file will be compiled and linked in automatically.  If this doesn't work well for you, put the .h files without .c files into a different folder (i.e. "include/") or something.
 
@@ -159,8 +159,6 @@ Please email me if it doesn't work!  I've only tested with GCC and clang.
 
 Job paralellizing would be sweet.  Patches welcome.
 
-This doesn't work with C++ yet, or any other languages for that matter.  Sometime later!
-
 =head1 LICENSE AND COPYRIGHT
 
 Copyright 2010 Joel Jensen.
@@ -193,7 +191,7 @@ sub build
 	if(ref($opts) eq '')
 	{
 		my $bin = $opts;
-		$bin =~ s/\.c$//;
+		$bin =~ s/\.cp?p?$//;
 		$opts = {'programs'=>{$bin=>$opts}};
 	}
 
@@ -228,7 +226,7 @@ sub build
 
 	for my $bin (keys %{ $opts->{'programs'} })
 	{
-		if(!$ab->{'default'} || $bin eq $ab->{'default'} || $ab->{'clean'})
+		if($ab->{'clean'} || !$ab->{'default'} || $ab->{'default'}{$bin})
 		{
 			$ab->program($opts->{'programs'}{$bin}, $bin);
 		}
@@ -290,6 +288,7 @@ sub new
 	$self->{'verbose'} = 0;
 	$self->{'debug'} = 0;
 	$self->{'cc'} = 'gcc';
+	$self->{'cpp'} = 'g++';
 	$self->{'osuffix'} = 'o';
 
 	$self->{'jobs'} = [];
@@ -339,7 +338,7 @@ sub args
 		}
 		elsif($_ =~ m/^--program=(.+)$/)
 		{
-			$self->{'default'} = $1;
+			$self->{'default'}{$1} = 1;
 		}
 		elsif($_ eq '-h' || $_ eq '--help')
 		{
@@ -407,6 +406,14 @@ sub add_build_job
 {
 	my($self, $cfile) = @_;
 
+	my $cpp = 0;
+	if(substr($cfile, -4, 4) eq '.cpp')
+	{
+		$self->{'cpp_ld'} = 1;
+		$cpp = 1;
+	}
+	# otherwise assume C instead of C++
+
 	my $ofile = replace_ext($cfile, $self->{'osuffix'});
 	$ofile =~ s/([^\/]+)$/\.$1/;
 
@@ -420,6 +427,7 @@ sub add_build_job
 			'cfile'=>$cfile,
 			'out'=>$ofile,
 			'task'=>'cc',
+			'cpp'=>$cpp,
 		);
 
 	my $jid = $self->add_job(\%job);
@@ -558,7 +566,9 @@ sub exec_job
 		my @cflags = @{ $self->{'cflags'} };
 		for my $rule (@{ $self->{'rules'} })
 		{
-			if($rule->{'file'} && ($rule->{'file'} eq $cfile) || $rule->{'file'} eq $ofile)
+			my $fm = $rule->{'filematch'};
+			if(($rule->{'file'} && ($rule->{'file'} eq $cfile || $rule->{'file'} eq $ofile)) ||
+			   ($fm && ($cfile =~ m/$fm/ || $ofile =~ m/$fm/)))
 			{
 				my $add = $rule->{'add_cflags'};
 				my $del = $rule->{'del_cflags'};
@@ -579,8 +589,10 @@ sub exec_job
 			}
 		}
 
+		my $exec = $job->{'cpp'} ? $self->{'cpp'} : $self->{'cc'};
+
 		my @gcc = grep { $_ } (
-			$self->{'cc'},
+			$exec,
 			@cflags,
 			'-MF', $depfile, '-MMD',
 			'-c', $cfile,
@@ -642,7 +654,8 @@ sub exec_job
 				print $exec_str."\n";
 			}elsif(!$self->{'quiet'})
 			{
-				print "cc $cfile..\n";
+				print $job->{'cpp'} ? 'cc++ ' : 'cc   ';
+				print "$cfile..\n";
 			}
 
 			my $start = time;
@@ -672,7 +685,10 @@ sub exec_job
 		for my $hfile (@$headers)
 		{
 			next if(substr($hfile, 0, 1) eq '/');
+			# look for a matching c file
 			my $c = replace_ext($hfile, 'c');
+			# look for a matching cpp file
+			$c = replace_ext($hfile, 'cpp') if(!-e $c);
 			next unless(-e $c);
 
 			push @needs, $self->add_build_job($c);
@@ -730,8 +746,9 @@ sub exec_job
 			}
 		}
 
+		my $exec = $self->{'cpp_ld'} ? $self->{'cpp'} : $self->{'cc'};
 		my @gcc = grep { $_ } (
-			$self->{'cc'},
+			$exec,
 			@ldflags,
 			@ofiles,
 			'-o', $out,
@@ -764,7 +781,8 @@ sub exec_job
 				print $exec_str."\n";
 			}elsif(!$self->{'quiet'})
 			{
-				print "ld $out..\n";
+				print $self->{'cpp_ld'} ? "ld++ " : "ld   ";
+				print "$out..\n";
 			}
 
 			my $start = time;
